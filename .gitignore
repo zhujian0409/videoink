@@ -1,0 +1,44 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# videoink runtime output
+output/
+.video_cache/
+.analysis/
+
+# Secrets / local config
+.env
+.env.*
+*.key
+config.local.*
+
+# Media — never commit raw video/audio
+*.mp4
+*.mkv
+*.webm
+*.m4a
+*.mp3
+*.wav
+*.flac
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/

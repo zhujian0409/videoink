@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "videoink"
+version = "0.1.0a0"
+description = "Turn any video link into a polished AI article. Markdown + images, multi-LLM."
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Zach Zhu"}]
+requires-python = ">=3.10"
+keywords = [
+    "video",
+    "transcription",
+    "ai",
+    "llm",
+    "article",
+    "yt-dlp",
+    "claude-skill",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Text Processing",
+]
+dependencies = [
+    "yt-dlp>=2026.1",
+]
+
+[project.optional-dependencies]
+openai = ["openai>=1.40"]
+anthropic = ["anthropic>=0.40"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/zhujian0409/videoink"
+Repository = "https://github.com/zhujian0409/videoink"
+Issues = "https://github.com/zhujian0409/videoink/issues"
+
+[project.scripts]
+videoink = "videoink.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["videoink*"]
