@@ -20,6 +20,7 @@ from pathlib import Path
 
 from . import __version__
 from .fetch import FetchResult, fetch, probe_formats, probe_info
+from .transcribe import TranscriptResult, transcribe
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -73,6 +74,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional path to write a JSON summary of the download.",
     )
 
+    # --- transcribe ---
+    trans_p = sub.add_parser(
+        "transcribe",
+        help="Transcribe an audio file using OpenAI Whisper API.",
+    )
+    trans_p.add_argument("audio", type=Path, help="Local audio file (<= 25 MB).")
+    trans_p.add_argument("--model", default="whisper-1", help="Whisper model name.")
+    trans_p.add_argument("--language", help="BCP-47 code to bias detection, e.g. 'en'.")
+    trans_p.add_argument("--prompt", help="Short text to prime vocabulary / style.")
+    trans_p.add_argument(
+        "--out-dir",
+        type=Path,
+        help="Directory for transcript.{json,txt}. Defaults to the audio file's directory.",
+    )
+    trans_p.add_argument(
+        "--base-url",
+        help="Override OpenAI API base URL (for OpenAI-compatible proxies).",
+    )
+
     return parser
 
 
@@ -80,11 +100,12 @@ def _print_stub_help() -> None:
     print(f"videoink {__version__} — video-to-article pipeline")
     print()
     print("Usage:")
-    print("  videoink probe <url>        List available formats for a video URL.")
-    print("  videoink fetch <url>        Download media from a video URL.")
-    print("  videoink --help             Show full help.")
+    print("  videoink probe <url>          List available formats for a video URL.")
+    print("  videoink fetch <url>          Download media from a video URL.")
+    print("  videoink transcribe <audio>   Transcribe an audio file (Whisper).")
+    print("  videoink --help               Show full help.")
     print()
-    print("Not yet available (v0.1 WIP): transcribe, generate, full.")
+    print("Not yet available (v0.1 WIP): generate, full.")
     print("See https://github.com/zhujian0409/videoink")
 
 
@@ -132,6 +153,38 @@ def _handle_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_transcribe(args: argparse.Namespace) -> int:
+    try:
+        result: TranscriptResult = transcribe(
+            args.audio,
+            model=args.model,
+            language=args.language,
+            prompt=args.prompt,
+            base_url=args.base_url,
+        )
+    except (FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"transcribe failed: {exc}", file=sys.stderr)
+        return 2
+
+    out_dir = args.out_dir or args.audio.parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = args.audio.stem
+    json_path = out_dir / f"{base}.transcript.json"
+    txt_path = out_dir / f"{base}.transcript.txt"
+    result.write_json(json_path)
+    result.write_text(txt_path)
+
+    dur = f"{result.duration:.1f}s" if result.duration is not None else "?"
+    print(f"  transcript.json → {json_path}", file=sys.stderr)
+    print(f"  transcript.txt  → {txt_path}", file=sys.stderr)
+    print(
+        f"  language: {result.language}, duration: {dur}, "
+        f"segments: {len(result.segments)}",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -140,6 +193,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_probe(args)
     if args.command == "fetch":
         return _handle_fetch(args)
+    if args.command == "transcribe":
+        return _handle_transcribe(args)
 
     _print_stub_help()
     return 0
