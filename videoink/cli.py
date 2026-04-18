@@ -20,7 +20,14 @@ from pathlib import Path
 
 from . import __version__
 from .fetch import FetchResult, fetch, probe_formats, probe_info
+from .generate import GenerateResult, generate_article
 from .transcribe import TranscriptResult, transcribe
+
+
+_DEFAULT_MODELS = {
+    "openai": "gpt-4o",
+    "anthropic": "claude-sonnet-4-6",
+}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -93,6 +100,44 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Override OpenAI API base URL (for OpenAI-compatible proxies).",
     )
 
+    # --- generate ---
+    gen_p = sub.add_parser(
+        "generate",
+        help="Generate a Markdown article from a transcript JSON.",
+    )
+    gen_p.add_argument(
+        "transcript",
+        type=Path,
+        help="Path to a transcript JSON produced by `videoink transcribe`.",
+    )
+    gen_p.add_argument(
+        "--provider",
+        choices=("openai", "anthropic"),
+        default="openai",
+        help="LLM provider (default: openai).",
+    )
+    gen_p.add_argument(
+        "--model",
+        help=f"Model name. Defaults per provider: {_DEFAULT_MODELS}",
+    )
+    gen_p.add_argument(
+        "--style",
+        default="default",
+        help="Style template name (default / technical / custom in --styles-dir).",
+    )
+    gen_p.add_argument(
+        "--styles-dir",
+        type=Path,
+        help="Directory to look up style files first (falls back to bundled).",
+    )
+    gen_p.add_argument("--temperature", type=float, help="Sampling temperature.")
+    gen_p.add_argument("--max-tokens", type=int, help="Max output tokens.")
+    gen_p.add_argument(
+        "--out",
+        type=Path,
+        help="Output article.md path. Defaults to sibling of the transcript.",
+    )
+
     return parser
 
 
@@ -100,12 +145,13 @@ def _print_stub_help() -> None:
     print(f"videoink {__version__} — video-to-article pipeline")
     print()
     print("Usage:")
-    print("  videoink probe <url>          List available formats for a video URL.")
-    print("  videoink fetch <url>          Download media from a video URL.")
-    print("  videoink transcribe <audio>   Transcribe an audio file (Whisper).")
-    print("  videoink --help               Show full help.")
+    print("  videoink probe <url>             List available formats for a video URL.")
+    print("  videoink fetch <url>             Download media from a video URL.")
+    print("  videoink transcribe <audio>      Transcribe an audio file (Whisper).")
+    print("  videoink generate <transcript>   Generate a Markdown article (LLM).")
+    print("  videoink --help                  Show full help.")
     print()
-    print("Not yet available (v0.1 WIP): generate, full.")
+    print("Not yet available (v0.1 WIP): full (end-to-end pipeline).")
     print("See https://github.com/zhujian0409/videoink")
 
 
@@ -185,6 +231,63 @@ def _handle_transcribe(args: argparse.Namespace) -> int:
     return 0
 
 
+def _get_provider(name: str):
+    if name == "openai":
+        from .llm import OpenAIProvider
+        return OpenAIProvider()
+    if name == "anthropic":
+        from .llm import AnthropicProvider
+        return AnthropicProvider()
+    raise ValueError(f"unknown provider: {name}")
+
+
+def _derive_article_path(transcript_path: Path, explicit_out: Path | None) -> Path:
+    if explicit_out is not None:
+        return explicit_out
+    stem = transcript_path.stem
+    if stem.endswith(".transcript"):
+        stem = stem[: -len(".transcript")]
+    return transcript_path.parent / f"{stem}.article.md"
+
+
+def _handle_generate(args: argparse.Namespace) -> int:
+    try:
+        provider = _get_provider(args.provider)
+    except ValueError as exc:
+        print(f"generate failed: {exc}", file=sys.stderr)
+        return 2
+
+    model = args.model or _DEFAULT_MODELS.get(args.provider, "")
+    if not model:
+        print(f"generate failed: no default model for provider {args.provider!r}", file=sys.stderr)
+        return 2
+
+    try:
+        result: GenerateResult = generate_article(
+            args.transcript,
+            provider=provider,
+            model=model,
+            style=args.style,
+            styles_dir=args.styles_dir,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+        )
+    except (FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"generate failed: {exc}", file=sys.stderr)
+        return 2
+
+    out_path = _derive_article_path(args.transcript, args.out)
+    result.write(out_path)
+
+    print(f"  article.md → {out_path}", file=sys.stderr)
+    print(
+        f"  provider={result.provider_name}, model={result.model}, "
+        f"style={result.style}, chars={len(result.article_md)}",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -195,6 +298,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_fetch(args)
     if args.command == "transcribe":
         return _handle_transcribe(args)
+    if args.command == "generate":
+        return _handle_generate(args)
 
     _print_stub_help()
     return 0

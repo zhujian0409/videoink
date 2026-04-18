@@ -50,3 +50,6 @@ videoink = "videoink.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["videoink*"]
+
+[tool.setuptools.package-data]
+videoink = ["styles/*.md"]
