@@ -13,21 +13,23 @@ First pip-installable alpha. Target release: after the items in
 ### Done
 
 - CLI subcommands: `probe`, `fetch`, `transcribe`, `generate`, `full`
-- Core modules (~2.5 K lines, all stdlib + yt-dlp + optional openai / anthropic):
+- Core modules (~2.5 K lines, all stdlib + yt-dlp + optional openai / anthropic / faster-whisper):
   - `videoink/fetch.py` — yt-dlp wrapper, 4 download modes, browser-cookie + proxy fallback
-  - `videoink/transcribe.py` — OpenAI Whisper (25 MB cap, ffmpeg pre-split hint)
-  - `videoink/generate.py` — transcript + style + LLM provider → Markdown article
+  - `videoink/transcribe.py` — **two engines**: `local` (offline faster-whisper, CPU-friendly, no API key) and `openai` (Whisper API, 25 MB cap)
+  - `videoink/generate.py` — transcript + style + LLM provider → Markdown article (standalone CLI path)
   - `videoink/llm/{openai,anthropic}.py` — two providers, lazy SDK import
   - `_handle_full` — end-to-end orchestrator producing `./output/<slug>/{article.md,transcript.{json,txt},images/}`
-- Built-in styles `default` + `technical`, bundled as `package-data`
-- 62 unit tests, **all zero-network**, 13 ms full suite
+- **Claude Code skill** (`SKILL.md`) with skill-native 3-step workflow: `fetch → transcribe --engine local → assistant writes article.md`. **Zero external API cost** in Claude Code.
+- Built-in styles `default` + `technical`, bundled as `package-data`.
+- 62 unit tests, **all zero-network**, 13 ms full suite.
+- Real end-to-end verified: Fireship "CSS in 100 Seconds" (140 s) → Markdown article, $0 external spend.
+- README + README.zh-CN with two-mode Quickstart; `docs/providers.md` aligned with shipped providers.
 
 ### Remaining for v0.1
 
-- [ ] `SKILL.md` — flesh out the Claude Code skill with concrete trigger → call sequence (currently a stub)
-- [ ] Real end-to-end smoke test against a public YouTube video with a real `OPENAI_API_KEY` (done locally, not in CI)
-- [ ] README polish + 30-second asciinema/gif demo
-- [ ] Switch repo from **private → public** (when all above pass)
+- [ ] Short demo (asciinema or Claude Code screen recording → gif) at README top.
+- [ ] Switch repo from **private → public** + `git push --tags v0.1.0a0`.
+- [ ] (Optional) PyPI release — `python -m build && twine upload`.
 
 ---
 
