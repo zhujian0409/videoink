@@ -1,5 +1,7 @@
 # videoink
 
+**Languages:** English | [中文](./README.zh-CN.md)
+
 > Turn any video link into a polished Markdown article. **Skill-native inside Claude Code (zero API cost)** — or a **standalone CLI** with your own keys.
 
 **Status:** v0.1 alpha. End-to-end works. Not yet on PyPI — install from git (see below).
