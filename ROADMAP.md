@@ -43,6 +43,7 @@ Grouped by theme. Items here are accepted as "we want this" but not scheduled.
 - **S1** `videoink/fetch.py` — `_site_slug`: improve edge cases. IP URLs currently return `"10"` for `10.0.0.1`; 4+ level subdomains return the wrong segment; URLs without `https://` scheme fall back to `"download"`. Consider deriving from full host with `-` replacement.
 - **S2** `videoink/fetch.py` — `_available_browsers`: detect browsers by the presence of an actual `cookies.sqlite`, not just the profile directory. Fixes the Linux false-positive where Firefox is "found" but yt-dlp then fails to read cookies.
 - **S3** `videoink/transcribe.py` — automatic chunking for audio > 25 MB (Whisper API limit). Today users have to pre-split with ffmpeg.
+- **S4** `videoink/cli.py` — `_sanitize_slug`: cap output length at 128 chars to avoid `ENAMETOOLONG` on extreme inputs (real YouTube/Bilibili IDs never trigger this, but future user-supplied `--slug` could).
 
 ### New features
 
