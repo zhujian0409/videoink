@@ -12,18 +12,18 @@ First pip-installable alpha. Target release: after the items in
 
 ### Done
 
-- CLI subcommands: `probe`, `fetch`, `transcribe`, `generate`
-- Core modules (~2.2 K lines, all stdlib + yt-dlp + optional openai / anthropic):
+- CLI subcommands: `probe`, `fetch`, `transcribe`, `generate`, `full`
+- Core modules (~2.5 K lines, all stdlib + yt-dlp + optional openai / anthropic):
   - `videoink/fetch.py` — yt-dlp wrapper, 4 download modes, browser-cookie + proxy fallback
   - `videoink/transcribe.py` — OpenAI Whisper (25 MB cap, ffmpeg pre-split hint)
   - `videoink/generate.py` — transcript + style + LLM provider → Markdown article
   - `videoink/llm/{openai,anthropic}.py` — two providers, lazy SDK import
+  - `_handle_full` — end-to-end orchestrator producing `./output/<slug>/{article.md,transcript.{json,txt},images/}`
 - Built-in styles `default` + `technical`, bundled as `package-data`
-- 51 unit tests, **all zero-network**, 12 ms full suite
+- 62 unit tests, **all zero-network**, 13 ms full suite
 
 ### Remaining for v0.1
 
-- [ ] `full` subcommand — one-shot `videoink full <url>` → article + transcript under `./output/<slug>/`
 - [ ] `SKILL.md` — flesh out the Claude Code skill with concrete trigger → call sequence (currently a stub)
 - [ ] Real end-to-end smoke test against a public YouTube video with a real `OPENAI_API_KEY` (done locally, not in CI)
 - [ ] README polish + 30-second asciinema/gif demo

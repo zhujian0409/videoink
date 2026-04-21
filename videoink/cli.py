@@ -1,19 +1,18 @@
 """videoink CLI — subcommands that invoke the ``videoink`` library.
 
-Currently implemented:
-  * ``probe``  — list available formats (or dump JSON metadata) for a URL.
-  * ``fetch``  — download media from a URL.
-
-Planned for v0.1:
-  * ``transcribe`` — audio → transcript.
-  * ``generate``   — transcript → draft article.
-  * ``full``       — end-to-end pipeline (fetch → transcribe → generate → export).
+Subcommands:
+  * ``probe``      — list available formats for a URL.
+  * ``fetch``      — download media from a URL.
+  * ``transcribe`` — audio -> transcript (OpenAI Whisper).
+  * ``generate``   — transcript -> Markdown article (LLM).
+  * ``full``       — end-to-end pipeline: fetch + transcribe + generate.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -28,6 +27,20 @@ _DEFAULT_MODELS = {
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-4-6",
 }
+
+_SLUG_RE = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def _sanitize_slug(s: str) -> str:
+    """Make a filesystem-friendly slug from a video id / title.
+
+    Keeps ``[A-Za-z0-9_-]``; runs of anything else collapse to ``-``.
+    Trims leading/trailing dashes. Falls back to ``"video"`` for an
+    otherwise-empty result.
+    """
+    s = (s or "").strip()
+    s = _SLUG_RE.sub("-", s).strip("-")
+    return s or "video"
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -138,6 +151,50 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output article.md path. Defaults to sibling of the transcript.",
     )
 
+    # --- full ---
+    full_p = sub.add_parser(
+        "full",
+        help="End-to-end: fetch audio + transcribe + generate article.",
+    )
+    full_p.add_argument("url", help="Video page URL.")
+    full_p.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path("output"),
+        help="Root output directory; a per-video slug subfolder is created (default: ./output).",
+    )
+    full_p.add_argument(
+        "--browser",
+        default="auto",
+        help="Browser for --cookies-from-browser. Use auto, none, or a browser name.",
+    )
+    full_p.add_argument("--audio-format", help="yt-dlp audio format expression.")
+    full_p.add_argument("--language", help="Transcribe: BCP-47 language code.")
+    full_p.add_argument(
+        "--whisper-model",
+        default="whisper-1",
+        help="Whisper model for the transcribe step.",
+    )
+    full_p.add_argument(
+        "--provider",
+        choices=("openai", "anthropic"),
+        default="openai",
+        help="LLM provider for the generate step (default: openai).",
+    )
+    full_p.add_argument("--model", help="Override LLM model for generate step.")
+    full_p.add_argument(
+        "--style",
+        default="default",
+        help="Article style template (default / technical / custom).",
+    )
+    full_p.add_argument(
+        "--styles-dir",
+        type=Path,
+        help="Override styles directory for generate step.",
+    )
+    full_p.add_argument("--temperature", type=float, help="LLM sampling temperature.")
+    full_p.add_argument("--max-tokens", type=int, help="LLM max output tokens.")
+
     return parser
 
 
@@ -149,9 +206,9 @@ def _print_stub_help() -> None:
     print("  videoink fetch <url>             Download media from a video URL.")
     print("  videoink transcribe <audio>      Transcribe an audio file (Whisper).")
     print("  videoink generate <transcript>   Generate a Markdown article (LLM).")
+    print("  videoink full <url>              End-to-end: fetch + transcribe + generate.")
     print("  videoink --help                  Show full help.")
     print()
-    print("Not yet available (v0.1 WIP): full (end-to-end pipeline).")
     print("See https://github.com/zhujian0409/videoink")
 
 
@@ -288,6 +345,124 @@ def _handle_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_full(args: argparse.Namespace) -> int:
+    url = (args.url or "").strip()
+    if not url:
+        print("full failed: URL is required", file=sys.stderr)
+        return 2
+
+    # 1. Probe metadata (for slug + logging)
+    print(f"[full] probe {url}", file=sys.stderr)
+    try:
+        info = probe_info(url, browser=args.browser)
+    except subprocess.CalledProcessError as exc:
+        print(f"full failed at probe: exit {exc.returncode}", file=sys.stderr)
+        return exc.returncode or 2
+    except (ValueError, ImportError) as exc:
+        print(f"full failed at probe: {exc}", file=sys.stderr)
+        return 2
+
+    video_id = str(info.get("id") or "video")
+    title = str(info.get("title") or "untitled")
+    duration = info.get("duration")
+    slug = _sanitize_slug(video_id)
+
+    out_dir = args.output_dir / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "images").mkdir(exist_ok=True)  # per SKILL.md output contract
+
+    dur_str = f"{duration:.0f}s" if isinstance(duration, (int, float)) else "?"
+    print(f"[full] {title}  [{video_id}]  duration={dur_str}", file=sys.stderr)
+    print(f"[full] output dir → {out_dir}", file=sys.stderr)
+
+    # 2. Fetch audio
+    print("[full] step 1/3: fetch audio", file=sys.stderr)
+    try:
+        fetch_result = fetch(
+            url,
+            out_dir=out_dir,
+            mode="audio",
+            audio_format=args.audio_format,
+            browser=args.browser,
+        )
+    except ValueError as exc:
+        print(f"full failed at fetch: {exc}", file=sys.stderr)
+        return 2
+    except subprocess.CalledProcessError as exc:
+        print(f"full failed at fetch: exit {exc.returncode}", file=sys.stderr)
+        return exc.returncode or 2
+
+    audio_path = fetch_result.audio_path
+    if audio_path is None:
+        print("full failed: no audio downloaded", file=sys.stderr)
+        return 2
+
+    # 3. Transcribe
+    audio_mb = audio_path.stat().st_size / 1024 / 1024
+    print(f"[full] step 2/3: transcribe ({audio_mb:.1f} MB)", file=sys.stderr)
+    try:
+        trans_result = transcribe(
+            audio_path,
+            model=args.whisper_model,
+            language=args.language,
+        )
+    except (FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"full failed at transcribe: {exc}", file=sys.stderr)
+        return 2
+
+    trans_json = out_dir / "transcript.json"
+    trans_txt = out_dir / "transcript.txt"
+    trans_result.write_json(trans_json)
+    trans_result.write_text(trans_txt)
+
+    # 4. Generate
+    print(
+        f"[full] step 3/3: generate (provider={args.provider}, style={args.style})",
+        file=sys.stderr,
+    )
+    try:
+        provider = _get_provider(args.provider)
+    except ValueError as exc:
+        print(f"full failed: {exc}", file=sys.stderr)
+        return 2
+
+    model = args.model or _DEFAULT_MODELS.get(args.provider, "")
+    if not model:
+        print(f"full failed: no default model for provider {args.provider!r}", file=sys.stderr)
+        return 2
+
+    try:
+        gen_result = generate_article(
+            trans_result,
+            provider=provider,
+            model=model,
+            style=args.style,
+            styles_dir=args.styles_dir,
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+        )
+    except (FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"full failed at generate: {exc}", file=sys.stderr)
+        return 2
+
+    article_path = out_dir / "article.md"
+    gen_result.write(article_path)
+
+    # Summary
+    print("", file=sys.stderr)
+    print("[full] done", file=sys.stderr)
+    print(f"  article.md      -> {article_path}", file=sys.stderr)
+    print(f"  transcript.json -> {trans_json}", file=sys.stderr)
+    print(f"  transcript.txt  -> {trans_txt}", file=sys.stderr)
+    print(f"  audio           -> {audio_path}", file=sys.stderr)
+    print(
+        f"  provider={gen_result.provider_name}, model={gen_result.model}, "
+        f"chars={len(gen_result.article_md)}",
+        file=sys.stderr,
+    )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -300,6 +475,8 @@ def main(argv: list[str] | None = None) -> int:
         return _handle_transcribe(args)
     if args.command == "generate":
         return _handle_generate(args)
+    if args.command == "full":
+        return _handle_full(args)
 
     _print_stub_help()
     return 0
