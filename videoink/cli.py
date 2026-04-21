@@ -99,8 +99,19 @@ def _build_parser() -> argparse.ArgumentParser:
         "transcribe",
         help="Transcribe an audio file using OpenAI Whisper API.",
     )
-    trans_p.add_argument("audio", type=Path, help="Local audio file (<= 25 MB).")
-    trans_p.add_argument("--model", default="whisper-1", help="Whisper model name.")
+    trans_p.add_argument("audio", type=Path, help="Local audio file.")
+    trans_p.add_argument(
+        "--engine",
+        choices=("openai", "local"),
+        default="openai",
+        help="openai = Whisper API (needs OPENAI_API_KEY, <=25 MB); "
+             "local = faster-whisper (offline, no key, CPU OK).",
+    )
+    trans_p.add_argument(
+        "--model",
+        help="Model name. Default: 'whisper-1' for openai, 'base' for local "
+             "(local options: tiny/base/small/medium/large-v3).",
+    )
     trans_p.add_argument("--language", help="BCP-47 code to bias detection, e.g. 'en'.")
     trans_p.add_argument("--prompt", help="Short text to prime vocabulary / style.")
     trans_p.add_argument(
@@ -110,7 +121,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     trans_p.add_argument(
         "--base-url",
-        help="Override OpenAI API base URL (for OpenAI-compatible proxies).",
+        help="Override OpenAI API base URL (openai engine only).",
     )
 
     # --- generate ---
@@ -171,9 +182,15 @@ def _build_parser() -> argparse.ArgumentParser:
     full_p.add_argument("--audio-format", help="yt-dlp audio format expression.")
     full_p.add_argument("--language", help="Transcribe: BCP-47 language code.")
     full_p.add_argument(
+        "--engine",
+        choices=("openai", "local"),
+        default="openai",
+        help="Transcribe engine: openai (Whisper API) or local (faster-whisper).",
+    )
+    full_p.add_argument(
         "--whisper-model",
-        default="whisper-1",
-        help="Whisper model for the transcribe step.",
+        help="Model for the transcribe step "
+             "(default: whisper-1 for openai, base for local).",
     )
     full_p.add_argument(
         "--provider",
@@ -260,6 +277,7 @@ def _handle_transcribe(args: argparse.Namespace) -> int:
     try:
         result: TranscriptResult = transcribe(
             args.audio,
+            engine=args.engine,
             model=args.model,
             language=args.language,
             prompt=args.prompt,
@@ -403,6 +421,7 @@ def _handle_full(args: argparse.Namespace) -> int:
     try:
         trans_result = transcribe(
             audio_path,
+            engine=args.engine,
             model=args.whisper_model,
             language=args.language,
         )

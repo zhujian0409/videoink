@@ -1,9 +1,9 @@
 ---
 name: videoink
-description: Use when the user provides a public video URL (YouTube, Bilibili, or any yt-dlp-supported platform) and wants to turn it into a polished Markdown article. Orchestrates the end-to-end video-to-article pipeline through the `videoink` CLI - fetch audio, transcribe with OpenAI Whisper, draft an article with the user's chosen LLM (OpenAI or Anthropic), and export Markdown plus a bundle directory ready for publishing. The skill does not publish anywhere; it leaves article.md on disk.
+description: Use when the user provides a public video URL (YouTube, Bilibili, or any yt-dlp-supported platform) and wants to turn it into a polished Markdown article. In Claude Code the skill runs offline - local faster-whisper for transcription, Claude Code itself writes the article (no external LLM API). Fetch + transcribe are local commands; generation is done by you (the assistant) reading the transcript directly.
 ---
 
-# videoink — video-to-article skill
+# videoink — video-to-article skill (skill-native, zero API cost)
 
 ## When to invoke
 
@@ -13,92 +13,100 @@ The user supplies a public video URL AND asks for textual output derived from th
 - "Turn this podcast into a newsletter"
 - "Write an article from this YouTube video"
 - "把这个视频/B站链接写成一篇文章"
-- "Give me a transcript of this video" (→ run partial pipeline, see below)
+- "Give me a transcript of this video" (→ run only steps 1-2 below)
 
 ## Do NOT invoke for
 
 - Questions about the video that can be answered from metadata alone.
 - Requests to *download* the video as a file (→ `videoink fetch` directly, or plain `yt-dlp`).
 - Editing / polishing an article the user has already pasted in.
-- Requests to *publish* the result somewhere (this skill stops at Markdown; the user picks the channel).
+- Requests to *publish* the result somewhere (this skill stops at Markdown on disk).
 
 ## Prerequisites
 
-Verify before running. If any is missing, report it and stop — do not attempt to install anything for the user.
+- `videoink` installed with local-whisper extra: `pip install 'videoink[local]'`.
+- `ffmpeg` on PATH (used by yt-dlp).
+- **No LLM API key required** in skill-native mode.
 
-- `videoink` Python package installed: `pip install 'videoink[openai,anthropic]'`.
-- `ffmpeg` on the system PATH (required by yt-dlp audio extraction).
-- At least one LLM provider key in the environment:
-  - `OPENAI_API_KEY` (default provider), or
-  - `ANTHROPIC_API_KEY`.
-
-## Default workflow — one command
+## Default workflow (skill-native, 3 steps)
 
 ```
-videoink full <url>
+1. videoink fetch --mode audio <url>                    # downloads audio only
+2. videoink transcribe --engine local <audio_file>      # offline faster-whisper
+3. YOU (the assistant) read the transcript.json and write article.md
 ```
 
-That single call runs `probe → fetch audio → transcribe → generate` and writes:
+### Step 1 — fetch audio
 
-```
-./output/<video-id>/
-    article.md              ← publishable Markdown
-    transcript.json         ← raw Whisper output (segments, timing, language)
-    transcript.txt          ← plain-text transcript
-    images/                 ← empty in v0.1; reserved for v0.2
-    <title> [<id>].audio.m4a
+```bash
+videoink fetch --mode audio <url> --out-dir ./output/<video-id>/
 ```
 
-Hand the user the absolute path to `article.md`. Let them open or publish it.
+The slug (`<video-id>`) comes from the video's canonical id; pick it from `videoink probe <url> --json` if you want control, else let `videoink full` derive it.
 
-## Mapping user intent to flags
+### Step 2 — transcribe locally
 
-| User signal | Flag |
+```bash
+videoink transcribe --engine local ./output/<slug>/*.audio.m4a
+```
+
+Produces `*.transcript.json` (full segments + timestamps) and `*.transcript.txt`. Offline. No API key.
+
+For a non-English source: add `--language zh` / `--language ja` / etc.
+
+### Step 3 — YOU write the article
+
+Don't call `videoink generate`. **Instead, do it yourself**:
+
+1. Read the style rules by opening `videoink/styles/<style>.md` (from the installed package). `default` is the neutral blog / newsletter voice. Pick `technical` if the user asks for a dev-blog tone.
+2. Read the transcript file (`*.transcript.json` or the `.txt`).
+3. Write the article **directly into** `./output/<slug>/article.md`, following the style rules strictly.
+4. Hand the user the absolute path to `article.md`.
+
+**Why you, not `videoink generate`**: in Claude Code you ARE the LLM. Calling `videoink generate` would open a second HTTP billing channel (OpenAI/Anthropic) that the user has to fund separately. Writing it yourself is faster, cheaper, and uses the model the user already has.
+
+## Output contract
+
+```
+./output/<slug>/
+    article.md                   ← YOU wrote this
+    *.transcript.json            ← faster-whisper output
+    *.transcript.txt
+    *.audio.m4a
+    images/                      ← empty in v0.1
+```
+
+Hand the user the absolute path to `article.md`. Do not publish anywhere.
+
+## Mapping user intent to flags / style
+
+| User signal | Action |
 |---|---|
-| "Developer-audience / technical tone" | `--style technical` |
-| "Use Claude / Anthropic" | `--provider anthropic` |
-| "The speaker is in Mandarin / Japanese / ..." | `--language zh` / `--language ja` / ... |
-| "Save it into project X" | `--output-dir ./projects/X/output` |
-| "Keep it short / more creative" | `--max-tokens 2000` / `--temperature 0.7` |
-| "I already wrote custom style rules" | `--style myname --styles-dir ./my-styles/` |
+| "Developer-audience / technical tone" | read `videoink/styles/technical.md` |
+| "The speaker is in Mandarin / Japanese / ..." | `videoink transcribe ... --language zh` |
+| "Save into project X" | `--out-dir ./projects/X/output/<slug>` |
+| "Use a bigger/smaller Whisper" | `videoink transcribe ... --model small` (or `tiny`/`medium`/`large-v3`) |
 
-If the user does not specify: defaults are OpenAI + `gpt-4o` + style `default`.
-
-## Partial pipelines
-
-Sometimes the user does not want the whole pipeline. Use the step-specific subcommand:
-
-| User wants only... | Command |
-|---|---|
-| The transcript | `videoink fetch <url> --mode audio && videoink transcribe <audio>` |
-| A list of available video/audio formats | `videoink probe <url>` |
-| An article from a transcript they already have | `videoink generate <transcript.json>` |
+Default: local-engine `base` model, `default` style, output under `./output/<slug>/`.
 
 ## Error recovery
 
-**Audio file larger than 25 MB** (Whisper API hard limit). Pre-split:
+**faster-whisper not installed**: the command prints `pip install 'videoink[local]'`. Surface it to the user verbatim.
 
-```bash
-ffmpeg -i audio.m4a -f segment -segment_time 600 -c copy chunk%d.m4a
-# then transcribe each chunk; concatenate the 'text' fields
-```
+**yt-dlp format extraction fails**: run `videoink probe <url>`, inspect formats, re-run with an explicit `--audio-format <id>`.
 
-Automatic chunking is planned for v0.2.
+## Standalone / non-skill usage (for reference)
 
-**yt-dlp format extraction fails or returns an unexpected codec**. Run:
+When NOT running inside Claude Code (e.g. cron, CI, headless server), the skill-native flow doesn't apply — there's no LLM "you" to write the article. In those cases use:
 
-```bash
-videoink probe <url>
-```
+- `videoink full <url> --engine local --provider openai --model gpt-4o` — drives the generate step via an external LLM (needs `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`).
+- `videoink generate <transcript.json>` — same, but standalone.
 
-Pick a format ID and re-run with `--audio-format <id>`.
-
-**Missing API key / SDK not installed**. The CLI prints a message naming the env var or pip extra; surface it to the user verbatim rather than guessing.
+These still exist; they're just the wrong default inside Claude Code.
 
 ## What this skill does NOT do (v0.1 scope)
 
 - Does not upload, publish, or post the article.
 - Does not fetch or embed images from the web (v0.2).
-- Does not auto-split audio longer than Whisper's 25 MB limit (v0.2).
 - Does not authenticate against Bilibili 1080P+ / member content (v0.2).
-- Does not invent facts not supported by the transcript; the built-in styles rule this out explicitly.
+- Does not invent facts unsupported by the transcript; the built-in styles rule this out explicitly.

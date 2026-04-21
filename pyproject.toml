@@ -37,6 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.40"]
 anthropic = ["anthropic>=0.40"]
+local = ["faster-whisper>=1.0"]
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.urls]
