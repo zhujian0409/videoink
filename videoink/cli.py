@@ -97,7 +97,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- transcribe ---
     trans_p = sub.add_parser(
         "transcribe",
-        help="Transcribe an audio file using OpenAI Whisper API.",
+        help="Transcribe an audio file (local faster-whisper or OpenAI Whisper).",
     )
     trans_p.add_argument("audio", type=Path, help="Local audio file.")
     trans_p.add_argument(
