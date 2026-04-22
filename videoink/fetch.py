@@ -245,8 +245,10 @@ def _site_slug(url: str) -> str:
     """Derive a filesystem-friendly slug from the URL hostname.
 
     Handles: schemeless URLs (retries with ``https://``), IPv4/IPv6 hosts
-    (renders as dashed), deep subdomains, and ccTLDs/new gTLDs outside
-    the traditional short set.
+    (renders as dashed), and common 2-4-letter ccTLDs (``.uk``, ``.co``,
+    ``.me``, ``.app``, ``.dev``, …) in addition to the historical short
+    gTLD set. Long new gTLDs (e.g. ``.technology``) are not stripped —
+    the slug will be the long TLD itself in that case.
     """
     host = (urlparse(url).hostname or "").lower()
     if not host:

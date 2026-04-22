@@ -5,10 +5,9 @@ See `README.md` for the project pitch.
 
 ---
 
-## v0.1 (current, in progress)
+## v0.1 (shipped 2026-04-21)
 
-First pip-installable alpha. Target release: after the items in
-`## Remaining for v0.1` ship.
+First pip-installable alpha. Tagged `v0.1.0a0` on GitHub.
 
 ### Done
 
@@ -25,31 +24,35 @@ First pip-installable alpha. Target release: after the items in
 - Real end-to-end verified: Fireship "CSS in 100 Seconds" (140 s) → Markdown article, $0 external spend.
 - README + README.zh-CN with two-mode Quickstart; `docs/providers.md` aligned with shipped providers.
 
-### Remaining for v0.1
+### Carried over to v0.2 / not release-blocking
 
-- [ ] Short demo (asciinema or Claude Code screen recording → gif) at README top.
-- [ ] Switch repo from **private → public** + `git push --tags v0.1.0a0`.
-- [ ] (Optional) PyPI release — `python -m build && twine upload`.
+- Short demo (asciinema or Claude Code screen recording → gif) at README top.
+- (Optional) PyPI release — `python -m build && twine upload`.
 
 ---
 
-## v0.2 backlog
+## v0.2 (current — 2026-04-22)
 
-Grouped by theme. Items here are accepted as "we want this" but not scheduled.
+Correctness / UX hardening pass — all items from the v0.1 `thorough-check`
+observation list. 92 unit tests, all zero-network. No behaviour change for
+the default happy path; edge cases now fail clearly or succeed where they
+previously broke.
 
-### Correctness / UX (from thorough-check observations)
+### Done — correctness / UX hardening
 
-- **N1** `videoink/generate.py` — `_load_transcript`: reject non-dict JSON with a clear `ValueError` instead of `AttributeError` on `list.get` (e.g. user passes `["a","b"]` as transcript).
-- **N2** `videoink/generate.py` — `_build_messages`: replace literal `--- STYLE RULES ---` / `--- TRANSCRIPT ---` delimiters with UUID-scoped XML-style tags to close the prompt-injection vector (transcript content that contains the delimiter can influence the LLM's system prompt).
-- **N3** `videoink/generate.py` — `generate_article`: guard `.strip()` behind `str(article or "")` so a misbehaving custom provider (returning `None` / non-str) doesn't produce a cryptic `AttributeError`.
-- **S1** `videoink/fetch.py` — `_site_slug`: improve edge cases. IP URLs currently return `"10"` for `10.0.0.1`; 4+ level subdomains return the wrong segment; URLs without `https://` scheme fall back to `"download"`. Consider deriving from full host with `-` replacement.
-- **S2** `videoink/fetch.py` — `_available_browsers`: detect browsers by the presence of an actual `cookies.sqlite`, not just the profile directory. Fixes the Linux false-positive where Firefox is "found" but yt-dlp then fails to read cookies.
-- **S3** `videoink/transcribe.py` — automatic chunking for audio > 25 MB (Whisper API limit). Today users have to pre-split with ffmpeg.
-- **S4** `videoink/cli.py` — `_sanitize_slug`: cap output length at 128 chars to avoid `ENAMETOOLONG` on extreme inputs (real YouTube/Bilibili IDs never trigger this, but future user-supplied `--slug` could).
+- **N1** `generate._load_transcript` raises `ValueError` for non-dict JSON.
+- **N2** `generate._build_messages` uses per-call UUID-scoped XML tags for style/transcript delimiters — closes the prompt-injection vector.
+- **N3** `generate.generate_article` coerces provider result to `str` before `.strip()` (guards `None` / non-str).
+- **S1** `fetch._site_slug` handles IPv4/IPv6 hosts, schemeless URLs, and common 2-4-letter ccTLDs beyond the original hard-coded set. (Long new gTLDs like `.technology` are a known limitation.)
+- **S2** `fetch._available_browsers` requires an actual cookies DB (`cookies.sqlite` for Firefox; `Default/Cookies` or `Default/Network/Cookies` for Chromium family) — fixes the Linux-server false-positive.
+- **S3** `transcribe` auto-chunks oversized audio via ffmpeg `-f segment -c copy` for the openai engine, stitching per-chunk segment timestamps back onto the original timeline.
+- **S4** `cli._sanitize_slug` caps output length at 128 chars to prevent `ENAMETOOLONG`.
+
+## v0.3 backlog
 
 ### New features
 
-- `OpenRouterProvider`, `OllamaProvider` (unify the v0.2 provider set to four)
+- `OpenRouterProvider`, `OllamaProvider` (unify the provider set to four)
 - Multi-model polish/judge loop: generate N variants, have another model pick the best
 - Bilibili first-class support: cookie handling, 1080P+, anti-leech
 - Keyframe-based image insertion + web-image sourcing (exists in the private Codex skill; needs generalising)
@@ -63,7 +66,7 @@ Grouped by theme. Items here are accepted as "we want this" but not scheduled.
 
 ---
 
-## v0.3+ (ideas, no commitment)
+## v0.4+ (ideas, no commitment)
 
 - Codex / Gemini / Cursor / other agent skill front-ends — thin `SKILL.md` variants that all call the same `videoink` Python API
 - Optional HTTP API for team deployments

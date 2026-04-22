@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "videoink"
-version = "0.1.0a0"
+version = "0.2.0a0"
 description = "Turn any video link into a polished AI article. Markdown + images, multi-LLM."
 readme = "README.md"
 license = {text = "MIT"}
