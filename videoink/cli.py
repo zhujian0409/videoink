@@ -29,17 +29,21 @@ _DEFAULT_MODELS = {
 }
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_-]+")
+_SLUG_MAX_LEN = 128
 
 
 def _sanitize_slug(s: str) -> str:
     """Make a filesystem-friendly slug from a video id / title.
 
     Keeps ``[A-Za-z0-9_-]``; runs of anything else collapse to ``-``.
-    Trims leading/trailing dashes. Falls back to ``"video"`` for an
-    otherwise-empty result.
+    Trims leading/trailing dashes. Caps length at 128 chars to avoid
+    ``ENAMETOOLONG`` when the slug becomes part of a path. Falls back
+    to ``"video"`` for an otherwise-empty result.
     """
     s = (s or "").strip()
     s = _SLUG_RE.sub("-", s).strip("-")
+    if len(s) > _SLUG_MAX_LEN:
+        s = s[:_SLUG_MAX_LEN].rstrip("-_")
     return s or "video"
 
 

@@ -43,6 +43,19 @@ class TestSanitizeSlug(unittest.TestCase):
         # defensive: ``str | None`` may be None from upstream .get()
         self.assertEqual(_sanitize_slug(None), "video")  # type: ignore[arg-type]
 
+    def test_excessively_long_slug_is_capped(self):
+        # Cap at 128 to avoid ENAMETOOLONG on some filesystems.
+        out = _sanitize_slug("a" * 300)
+        self.assertLessEqual(len(out), 128)
+        self.assertTrue(out.startswith("a"))
+
+    def test_cap_does_not_leave_trailing_dash(self):
+        # Construct a string where the 128-char cut lands on a dash.
+        raw = "x" * 127 + "-" + "y" * 10
+        out = _sanitize_slug(raw)
+        self.assertLessEqual(len(out), 128)
+        self.assertFalse(out.endswith("-"))
+
 
 if __name__ == "__main__":
     unittest.main()
