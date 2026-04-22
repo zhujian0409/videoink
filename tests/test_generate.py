@@ -220,6 +220,24 @@ class TestGenerateArticleE2E(unittest.TestCase):
             )
         fake.chat.assert_not_called()
 
+    def test_provider_returning_none_does_not_crash(self):
+        fake = MagicMock()
+        fake.name = "none-provider"
+        fake.chat.return_value = None
+        result = generate_article(
+            transcript={"text": "t"}, provider=fake, model="m",
+        )
+        self.assertEqual(result.article_md, "")
+
+    def test_provider_returning_non_str_does_not_crash(self):
+        fake = MagicMock()
+        fake.name = "weird-provider"
+        fake.chat.return_value = 42
+        result = generate_article(
+            transcript={"text": "t"}, provider=fake, model="m",
+        )
+        self.assertEqual(result.article_md, "42")
+
     def test_provider_without_name_attribute(self):
         fake = MagicMock(spec=["chat"])  # no .name attribute
         fake.chat.return_value = "# X\n"

@@ -166,7 +166,7 @@ def generate_article(
     article = provider.chat(messages, model, **chat_kwargs)
 
     return GenerateResult(
-        article_md=article.strip(),
+        article_md=str(article or "").strip(),
         provider_name=getattr(provider, "name", "unknown"),
         model=model,
         style=style,
