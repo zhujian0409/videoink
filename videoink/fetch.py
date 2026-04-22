@@ -127,12 +127,47 @@ def _platform_key() -> str:
     return "linux"
 
 
+def _profile_has_cookies(browser: str, profile_root: Path) -> bool:
+    """Return True iff ``profile_root`` looks like a usable cookies source.
+
+    Firefox stores cookies at ``<root>/<random>.default/cookies.sqlite``.
+    Chromium-family browsers use ``<root>/Default/Cookies`` (newer builds
+    may use ``<root>/Default/Network/Cookies`` or numbered profiles).
+
+    Checking by directory existence alone produces false positives on
+    Linux servers where ``~/.mozilla/firefox`` exists but is empty.
+    """
+    if not profile_root.exists():
+        return False
+    if browser == "firefox":
+        try:
+            for child in profile_root.iterdir():
+                if child.is_dir() and (child / "cookies.sqlite").is_file():
+                    return True
+        except OSError:
+            return False
+        return False
+    for relative in ("Default/Cookies", "Default/Network/Cookies"):
+        if (profile_root / relative).is_file():
+            return True
+    try:
+        for child in profile_root.iterdir():
+            if not (child.is_dir() and child.name.startswith("Profile")):
+                continue
+            for relative in ("Cookies", "Network/Cookies"):
+                if (child / relative).is_file():
+                    return True
+    except OSError:
+        return False
+    return False
+
+
 def _available_browsers() -> list[str]:
     hints = _BROWSER_PROFILE_HINTS.get(_platform_key(), {})
     found: list[str] = []
     for browser in DEFAULT_BROWSERS:
         for hint in hints.get(browser, []):
-            if Path(hint).expanduser().exists():
+            if _profile_has_cookies(browser, Path(hint).expanduser()):
                 found.append(browser)
                 break
     return found

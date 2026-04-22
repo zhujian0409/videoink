@@ -1,9 +1,10 @@
 """Smoke tests for videoink.fetch — no network calls."""
 
+import tempfile
 import unittest
 from pathlib import Path
 
-from videoink.fetch import FetchResult, _site_slug, fetch
+from videoink.fetch import FetchResult, _profile_has_cookies, _site_slug, fetch
 
 
 class TestSiteSlug(unittest.TestCase):
@@ -37,6 +38,54 @@ class TestSiteSlug(unittest.TestCase):
 
     def test_single_label_host(self):
         self.assertEqual(_site_slug("http://localhost/x"), "localhost")
+
+
+class TestProfileHasCookies(unittest.TestCase):
+    def test_firefox_profile_dir_without_sqlite(self):
+        # Linux server false-positive: ~/.mozilla/firefox exists with an
+        # empty 'random.default' subdir but no cookies.sqlite.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "random.default").mkdir()
+            self.assertFalse(_profile_has_cookies("firefox", root))
+
+    def test_firefox_with_cookies(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            profile = root / "random.default"
+            profile.mkdir()
+            (profile / "cookies.sqlite").touch()
+            self.assertTrue(_profile_has_cookies("firefox", root))
+
+    def test_firefox_empty_profile_root(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertFalse(_profile_has_cookies("firefox", Path(d)))
+
+    def test_firefox_missing_profile_root(self):
+        self.assertFalse(
+            _profile_has_cookies("firefox", Path("/nonexistent/firefox/xyz"))
+        )
+
+    def test_chrome_default_cookies(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "Default").mkdir()
+            (root / "Default" / "Cookies").touch()
+            self.assertTrue(_profile_has_cookies("chrome", root))
+
+    def test_chrome_network_cookies(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            net = root / "Default" / "Network"
+            net.mkdir(parents=True)
+            (net / "Cookies").touch()
+            self.assertTrue(_profile_has_cookies("chrome", root))
+
+    def test_chrome_profile_without_cookies(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "Default").mkdir()  # exists but no Cookies file
+            self.assertFalse(_profile_has_cookies("chrome", root))
 
 
 class TestFetchArgs(unittest.TestCase):
