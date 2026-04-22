@@ -104,6 +104,26 @@ class TestLoadTranscript(unittest.TestCase):
         with self.assertRaises(TypeError):
             _load_transcript(42)
 
+    def test_json_file_list_root_raises_value_error(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(["a", "b", "c"], fh)
+            path = Path(fh.name)
+        try:
+            with self.assertRaisesRegex(ValueError, "transcript JSON"):
+                _load_transcript(path)
+        finally:
+            path.unlink()
+
+    def test_json_file_scalar_root_raises_value_error(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump("just a string", fh)
+            path = Path(fh.name)
+        try:
+            with self.assertRaisesRegex(ValueError, "transcript JSON"):
+                _load_transcript(path)
+        finally:
+            path.unlink()
+
 
 class TestBuildMessages(unittest.TestCase):
     def test_shape(self):

@@ -94,6 +94,11 @@ def _load_transcript(source: Any) -> tuple[str, str]:
         if path.is_dir():
             raise ValueError(f"transcript path is a directory: {path}")
         data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise ValueError(
+                f"transcript JSON must be an object with a 'text' key, "
+                f"got {type(data).__name__}: {path}"
+            )
         return str(data.get("text", "")), str(path)
 
     raise TypeError(f"unsupported transcript source: {type(source).__name__}")
