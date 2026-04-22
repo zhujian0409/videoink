@@ -19,6 +19,25 @@ class TestSiteSlug(unittest.TestCase):
     def test_nonsense_url(self):
         self.assertEqual(_site_slug("not a url"), "download")
 
+    def test_ipv4_returns_dashed_address(self):
+        self.assertEqual(_site_slug("http://10.0.0.1/file.mp4"), "10-0-0-1")
+
+    def test_schemeless_url_recovered(self):
+        self.assertEqual(_site_slug("youtube.com/watch?v=abc"), "youtube")
+
+    def test_deep_subdomain_with_new_gtld(self):
+        # 4+ label host with a TLD outside the old hard-coded set
+        self.assertEqual(_site_slug("https://a.b.c.example.app/x"), "example")
+
+    def test_five_level_subdomain(self):
+        self.assertEqual(_site_slug("https://w.x.y.z.example.com/"), "example")
+
+    def test_cc_tld_uk(self):
+        self.assertEqual(_site_slug("https://foo.co.uk/path"), "foo")
+
+    def test_single_label_host(self):
+        self.assertEqual(_site_slug("http://localhost/x"), "localhost")
+
 
 class TestFetchArgs(unittest.TestCase):
     def test_empty_url_raises(self):

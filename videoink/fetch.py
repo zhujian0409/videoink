@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -199,16 +200,35 @@ def _ensure_yt_dlp(cache_dir: Path | None) -> tuple[list[str], dict[str, str]]:
 
 # ---- generic helpers -----------------------------------------------------
 
+_IPV4_RE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
+_HOST_CHARS_RE = re.compile(r"[a-z0-9.\-:\[\]]+")
+_TLD_RE = re.compile(r"[a-z]{2,4}")
+_SLUG_CLEAN_RE = re.compile(r"[^a-z0-9]+")
+
+
 def _site_slug(url: str) -> str:
-    host = (urlparse(url).hostname or "download").lower()
+    """Derive a filesystem-friendly slug from the URL hostname.
+
+    Handles: schemeless URLs (retries with ``https://``), IPv4/IPv6 hosts
+    (renders as dashed), deep subdomains, and ccTLDs/new gTLDs outside
+    the traditional short set.
+    """
+    host = (urlparse(url).hostname or "").lower()
+    if not host:
+        host = (urlparse(f"https://{url}").hostname or "").lower()
+    if not host or not _HOST_CHARS_RE.fullmatch(host):
+        return "download"
+    if _IPV4_RE.fullmatch(host):
+        return host.replace(".", "-")
+    if ":" in host:
+        return _SLUG_CLEAN_RE.sub("-", host).strip("-") or "download"
     parts = [p for p in host.split(".") if p and p != "www"]
-    if len(parts) >= 2 and parts[-1] in {"com", "cn", "net", "org", "tv", "io"}:
-        base = parts[-2]
-    elif parts:
-        base = parts[0]
-    else:
-        base = "download"
-    return base.replace("_", "-")
+    while len(parts) > 1 and _TLD_RE.fullmatch(parts[-1]):
+        parts = parts[:-1]
+    if not parts:
+        return "download"
+    base = _SLUG_CLEAN_RE.sub("-", parts[-1]).strip("-")
+    return base or "download"
 
 
 def _output_template(out_dir: Path, suffix: str) -> str:
