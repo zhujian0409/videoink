@@ -16,13 +16,18 @@ is preferred.
 from __future__ import annotations
 
 import json
+import math
 import os
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
 
 WHISPER_MAX_BYTES = 25 * 1024 * 1024  # 25 MB — openai engine only
+WHISPER_CHUNK_TARGET_BYTES = 24 * 1024 * 1024  # 1 MB safety margin below the cap
 
 Engine = Literal["openai", "local"]
 
@@ -114,7 +119,16 @@ def transcribe(
     audio_path = Path(audio_path)
 
     if engine == "openai":
-        _validate_audio(audio_path, enforce_size_cap=True)
+        _validate_audio(audio_path, enforce_size_cap=False)
+        if audio_path.stat().st_size > WHISPER_MAX_BYTES:
+            return _transcribe_openai_chunked(
+                audio_path,
+                model=model or "whisper-1",
+                language=language,
+                prompt=prompt,
+                api_key=api_key,
+                base_url=base_url,
+            )
         return _transcribe_openai(
             audio_path,
             model=model or "whisper-1",
@@ -191,6 +205,135 @@ def _transcribe_openai(
         engine="openai",
         segments=segments,
     )
+
+
+def _probe_duration(audio_path: Path) -> float:
+    """Return the duration (seconds) of an audio file using ffprobe."""
+    if shutil.which("ffprobe") is None:
+        raise RuntimeError(
+            "ffprobe not found on PATH. Install ffmpeg so videoink can "
+            "measure audio duration before chunking."
+        )
+    result = subprocess.run(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(audio_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    raw = result.stdout.strip()
+    if not raw:
+        raise RuntimeError(f"ffprobe returned no duration for {audio_path}")
+    return float(raw)
+
+
+def _split_audio(audio_path: Path, segment_seconds: float, output_dir: Path) -> list[Path]:
+    """Split ``audio_path`` into pieces of ~``segment_seconds`` each via ffmpeg.
+
+    Uses stream-copy (``-c copy``) so no re-encoding happens; this is fast
+    and preserves quality but means each cut lands on the nearest keyframe.
+    Returns the list of produced chunk files in time order.
+    """
+    if shutil.which("ffmpeg") is None:
+        raise RuntimeError(
+            "ffmpeg not found on PATH. Install ffmpeg so videoink can "
+            "split oversized audio before sending to the Whisper API."
+        )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pattern = str(output_dir / f"chunk-%03d{audio_path.suffix}")
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-v", "error",
+            "-i", str(audio_path),
+            "-f", "segment",
+            "-segment_time", f"{segment_seconds:.3f}",
+            "-c", "copy",
+            "-reset_timestamps", "1",
+            pattern,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return sorted(output_dir.glob(f"chunk-*{audio_path.suffix}"))
+
+
+def _stitch_chunk_results(
+    audio_path: Path,
+    chunk_results: list[tuple[float, TranscriptResult]],
+    model: str,
+) -> TranscriptResult:
+    """Combine per-chunk TranscriptResults into one, offsetting segment
+    timestamps by each chunk's start in the original audio."""
+    all_segments: list[TranscriptSegment] = []
+    text_parts: list[str] = []
+    language: str | None = None
+    end_time = 0.0
+    for offset, result in chunk_results:
+        for seg in result.segments:
+            all_segments.append(
+                TranscriptSegment(
+                    start=seg.start + offset,
+                    end=seg.end + offset,
+                    text=seg.text,
+                )
+            )
+        if result.text:
+            text_parts.append(result.text)
+        if language is None and result.language:
+            language = result.language
+        if result.duration is not None:
+            end_time = max(end_time, offset + result.duration)
+    return TranscriptResult(
+        audio_path=audio_path,
+        text=" ".join(text_parts).strip(),
+        language=language,
+        duration=end_time if end_time > 0 else None,
+        model=model,
+        engine="openai",
+        segments=all_segments,
+    )
+
+
+def _transcribe_openai_chunked(
+    audio_path: Path,
+    *,
+    model: str,
+    language: str | None,
+    prompt: str | None,
+    api_key: str | None,
+    base_url: str | None,
+) -> TranscriptResult:
+    """Transcribe an audio file larger than the Whisper API size cap by
+    splitting it into ≤24 MB chunks with ffmpeg, transcribing each, and
+    stitching the segments back together with offset timestamps."""
+    size = audio_path.stat().st_size
+    duration = _probe_duration(audio_path)
+    num_chunks = max(2, math.ceil(size / WHISPER_CHUNK_TARGET_BYTES))
+    segment_seconds = duration / num_chunks
+    with tempfile.TemporaryDirectory(prefix="videoink_chunks_") as tmp:
+        chunks = _split_audio(audio_path, segment_seconds, Path(tmp))
+        if not chunks:
+            raise RuntimeError(f"ffmpeg produced no chunks for {audio_path}")
+        results: list[tuple[float, TranscriptResult]] = []
+        for i, chunk in enumerate(chunks):
+            _validate_audio(chunk, enforce_size_cap=True)
+            offset = i * segment_seconds
+            r = _transcribe_openai(
+                chunk,
+                model=model,
+                language=language,
+                prompt=prompt,
+                api_key=api_key,
+                base_url=base_url,
+            )
+            results.append((offset, r))
+    return _stitch_chunk_results(audio_path, results, model)
 
 
 def _transcribe_local(
