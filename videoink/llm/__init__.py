@@ -1,9 +1,9 @@
 """LLM provider abstraction for videoink.
 
-v0.1 ships ``OpenAIProvider`` and ``AnthropicProvider``. v0.2 will add
-``OpenRouterProvider`` (single-gateway access to many models) and
-``OllamaProvider`` (local inference). All providers implement the
-``LLMProvider`` protocol from ``base.py``:
+v0.3 ships four providers: ``OpenAIProvider``, ``AnthropicProvider``,
+``OpenRouterProvider`` (single gateway to many models) and
+``OllamaProvider`` (local inference). All implement the ``LLMProvider``
+protocol from ``base.py``:
 
     provider.chat(messages, model, temperature=..., max_tokens=...) -> str
 
@@ -15,5 +15,11 @@ conventions where necessary (e.g. Anthropic pulls system out).
 from .anthropic import AnthropicProvider
 from .base import LLMProvider
 from .openai import OpenAIProvider
+from .openrouter import OpenRouterProvider
 
-__all__ = ["LLMProvider", "OpenAIProvider", "AnthropicProvider"]
+__all__ = [
+    "LLMProvider",
+    "OpenAIProvider",
+    "AnthropicProvider",
+    "OpenRouterProvider",
+]

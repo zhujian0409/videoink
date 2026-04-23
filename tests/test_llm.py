@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 from videoink.llm.anthropic import AnthropicProvider, _split_system
 from videoink.llm.openai import OpenAIProvider
+from videoink.llm.openrouter import OpenRouterProvider
 
 
 class TestSplitSystem(unittest.TestCase):
@@ -188,6 +189,107 @@ class TestAnthropicChatViaFakeSDK(unittest.TestCase):
         p = AnthropicProvider(api_key="ant-fake")
         result = p.chat([{"role": "user", "content": "hi"}], model="claude-sonnet-4-6")
         self.assertEqual(result, "part1 part2")
+
+
+class TestOpenRouterProviderInit(unittest.TestCase):
+    def test_name(self):
+        self.assertEqual(OpenRouterProvider(api_key="or-x").name, "openrouter")
+
+    def test_explicit_key(self):
+        p = OpenRouterProvider(api_key="or-test")
+        self.assertEqual(p.api_key, "or-test")
+
+    def test_env_key(self):
+        old = os.environ.get("OPENROUTER_API_KEY")
+        os.environ["OPENROUTER_API_KEY"] = "or-env"
+        try:
+            p = OpenRouterProvider()
+            self.assertEqual(p.api_key, "or-env")
+        finally:
+            if old is None:
+                os.environ.pop("OPENROUTER_API_KEY", None)
+            else:
+                os.environ["OPENROUTER_API_KEY"] = old
+
+    def test_default_base_url(self):
+        p = OpenRouterProvider(api_key="or-x")
+        self.assertEqual(p.base_url, "https://openrouter.ai/api/v1")
+
+    def test_override_base_url(self):
+        p = OpenRouterProvider(api_key="or-x", base_url="https://alt.example/api/v1")
+        self.assertEqual(p.base_url, "https://alt.example/api/v1")
+
+    def test_missing_key_raises_distinct_message(self):
+        old = os.environ.pop("OPENROUTER_API_KEY", None)
+        try:
+            p = OpenRouterProvider()
+            fake = ModuleType("openai"); fake.OpenAI = MagicMock()
+            sys.modules["openai"] = fake
+            try:
+                with self.assertRaisesRegex(ValueError, "OpenRouter API key"):
+                    p._get_client()
+            finally:
+                sys.modules.pop("openai", None)
+        finally:
+            if old is not None:
+                os.environ["OPENROUTER_API_KEY"] = old
+
+
+class TestOpenRouterChatViaFakeSDK(unittest.TestCase):
+    def setUp(self):
+        fake = ModuleType("openai")
+        fake_resp = MagicMock()
+        fake_resp.choices = [MagicMock()]
+        fake_resp.choices[0].message.content = "router reply"
+        self.fake_client = MagicMock()
+        self.fake_client.chat.completions.create.return_value = fake_resp
+        self.openai_ctor = MagicMock(return_value=self.fake_client)
+        fake.OpenAI = self.openai_ctor
+        self._prev = sys.modules.get("openai")
+        sys.modules["openai"] = fake
+
+    def tearDown(self):
+        if self._prev is None:
+            sys.modules.pop("openai", None)
+        else:
+            sys.modules["openai"] = self._prev
+
+    def test_client_built_with_openrouter_base_url(self):
+        p = OpenRouterProvider(api_key="or-fake")
+        p.chat([{"role": "user", "content": "hi"}], model="anthropic/claude-sonnet-4.5")
+        ctor_call = self.openai_ctor.call_args
+        self.assertEqual(ctor_call.kwargs["api_key"], "or-fake")
+        self.assertEqual(ctor_call.kwargs["base_url"], "https://openrouter.ai/api/v1")
+
+    def test_chat_returns_content(self):
+        p = OpenRouterProvider(api_key="or-fake")
+        out = p.chat(
+            [{"role": "user", "content": "hi"}],
+            model="meta-llama/llama-3.3-70b-instruct",
+            temperature=0.3,
+        )
+        self.assertEqual(out, "router reply")
+        call = self.fake_client.chat.completions.create.call_args
+        self.assertEqual(call.kwargs["model"], "meta-llama/llama-3.3-70b-instruct")
+        self.assertEqual(call.kwargs["temperature"], 0.3)
+
+    def test_optional_attribution_headers(self):
+        p = OpenRouterProvider(
+            api_key="or-fake",
+            http_referer="https://example.com",
+            x_title="videoink",
+        )
+        p.chat([{"role": "user", "content": "hi"}], model="openai/gpt-4o-mini")
+        ctor_kwargs = self.openai_ctor.call_args.kwargs
+        self.assertEqual(
+            ctor_kwargs["default_headers"],
+            {"HTTP-Referer": "https://example.com", "X-Title": "videoink"},
+        )
+
+    def test_no_headers_by_default(self):
+        p = OpenRouterProvider(api_key="or-fake")
+        p.chat([{"role": "user", "content": "hi"}], model="openai/gpt-4o-mini")
+        self.assertNotIn("default_headers", self.openai_ctor.call_args.kwargs)
 
 
 if __name__ == "__main__":

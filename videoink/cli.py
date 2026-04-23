@@ -26,6 +26,7 @@ from .transcribe import TranscriptResult, transcribe
 _DEFAULT_MODELS = {
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-4-6",
+    "openrouter": "openai/gpt-4o-mini",
 }
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_-]+")
@@ -140,7 +141,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     gen_p.add_argument(
         "--provider",
-        choices=("openai", "anthropic"),
+        choices=("openai", "anthropic", "openrouter"),
         default="openai",
         help="LLM provider (default: openai).",
     )
@@ -198,7 +199,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     full_p.add_argument(
         "--provider",
-        choices=("openai", "anthropic"),
+        choices=("openai", "anthropic", "openrouter"),
         default="openai",
         help="LLM provider for the generate step (default: openai).",
     )
@@ -317,6 +318,9 @@ def _get_provider(name: str):
     if name == "anthropic":
         from .llm import AnthropicProvider
         return AnthropicProvider()
+    if name == "openrouter":
+        from .llm import OpenRouterProvider
+        return OpenRouterProvider()
     raise ValueError(f"unknown provider: {name}")
 
 
