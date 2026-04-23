@@ -67,7 +67,7 @@ Drop `--engine local` to use OpenAI Whisper instead; add `--provider anthropic` 
     article.md                  # publishable Markdown
     transcript.json             # full Whisper output (segments, timing, language)
     transcript.txt              # plain-text transcript
-    images/                     # empty in v0.1; reserved for v0.2
+    images/                     # empty; keyframe + web-image insertion is v0.4
     <title> [<id>].audio.m4a    # the audio we transcribed
 ```
 
@@ -78,7 +78,7 @@ Open `article.md` in any Markdown editor. Publish from there.
 - Python 3.10+
 - `ffmpeg` on PATH (used by yt-dlp)
 - **Claude Code skill mode**: nothing else (first run downloads the `faster-whisper` base model, ~145 MB)
-- **Standalone CLI mode**: one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+- **Standalone CLI mode**: one of `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENROUTER_API_KEY`. Ollama needs no key — just a running `ollama serve` on `localhost:11434` (or `OLLAMA_HOST`).
 
 ## Subcommands
 
@@ -95,10 +95,13 @@ All subcommands accept `--help`.
 
 ## Styles
 
-Two built-in styles ship as package data:
+Five built-in styles ship as package data:
 
-- `default` — neutral blog / newsletter voice
+- `default` — neutral blog / knowledge-article voice
 - `technical` — engineering-audience voice
+- `newsletter` — conversational, hook-driven, scannable paragraphs
+- `summary` — tight 300-500 word recap, bullets over prose
+- `interview` — preserves verbatim quotes; good for podcasts / talking-heads
 
 Bring your own:
 
@@ -118,8 +121,10 @@ The [`SKILL.md`](./SKILL.md) at the repo root is the skill definition Claude Cod
 See [`ROADMAP.md`](./ROADMAP.md). Short version:
 
 - **v0.1** ✓ — 5 CLI subcommands, local + OpenAI transcribe engines, OpenAI + Anthropic LLM providers, Claude Code skill, zero-API skill-native mode.
-- **v0.2** — OpenRouter + Ollama providers, multi-model judge loop, Bilibili first-class, auto-chunk >25 MB audio, web image sourcing.
-- **v0.3+** — Codex / Cursor / other agent skill adapters, optional HTTP API.
+- **v0.2** ✓ — correctness / UX hardening: auto-chunk >25 MB audio, UUID-scoped prompt delimiters, browser-cookie detection, slug length cap.
+- **v0.3** ✓ — OpenRouter + Ollama providers (four total), three new bundled styles (`newsletter` / `summary` / `interview`), GitHub Actions CI.
+- **v0.4** — multi-model judge loop, Bilibili first-class, keyframe + web-image insertion.
+- **v0.5+** — Codex / Cursor / other agent skill adapters, optional HTTP API.
 
 ## Background
 
@@ -127,7 +132,7 @@ This repo started from a working-but-personal pipeline the author ran daily for 
 
 ## Contributing
 
-`ROADMAP.md` has a `v0.2 backlog` section with concrete, contained tasks. PRs welcome.
+`ROADMAP.md` has a `v0.4 backlog` section with concrete, contained tasks. PRs welcome.
 
 ## License
 
