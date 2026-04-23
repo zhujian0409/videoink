@@ -43,8 +43,17 @@ class TestLoadStyle(unittest.TestCase):
             self.assertIn("default style", md)
 
     def test_bundled_styles_dir_has_files(self):
-        self.assertTrue((BUNDLED_STYLES / "default.md").is_file())
-        self.assertTrue((BUNDLED_STYLES / "technical.md").is_file())
+        for name in ("default", "technical", "newsletter", "summary", "interview"):
+            self.assertTrue(
+                (BUNDLED_STYLES / f"{name}.md").is_file(),
+                f"missing bundled style: {name}",
+            )
+
+    def test_all_bundled_styles_load(self):
+        for name in ("default", "technical", "newsletter", "summary", "interview"):
+            md = _load_style(name)
+            self.assertIn("Rules", md, f"{name} style has no Rules section")
+            self.assertGreater(len(md.strip()), 100, f"{name} style suspiciously short")
 
 
 class TestLoadTranscript(unittest.TestCase):
