@@ -27,6 +27,7 @@ _DEFAULT_MODELS = {
     "openai": "gpt-4o",
     "anthropic": "claude-sonnet-4-6",
     "openrouter": "openai/gpt-4o-mini",
+    "ollama": "llama3.2",
 }
 
 _SLUG_RE = re.compile(r"[^A-Za-z0-9_-]+")
@@ -141,7 +142,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     gen_p.add_argument(
         "--provider",
-        choices=("openai", "anthropic", "openrouter"),
+        choices=("openai", "anthropic", "openrouter", "ollama"),
         default="openai",
         help="LLM provider (default: openai).",
     )
@@ -199,7 +200,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     full_p.add_argument(
         "--provider",
-        choices=("openai", "anthropic", "openrouter"),
+        choices=("openai", "anthropic", "openrouter", "ollama"),
         default="openai",
         help="LLM provider for the generate step (default: openai).",
     )
@@ -321,6 +322,9 @@ def _get_provider(name: str):
     if name == "openrouter":
         from .llm import OpenRouterProvider
         return OpenRouterProvider()
+    if name == "ollama":
+        from .llm import OllamaProvider
+        return OllamaProvider()
     raise ValueError(f"unknown provider: {name}")
 
 

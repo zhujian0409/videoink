@@ -14,6 +14,7 @@ conventions where necessary (e.g. Anthropic pulls system out).
 
 from .anthropic import AnthropicProvider
 from .base import LLMProvider
+from .ollama import OllamaProvider
 from .openai import OpenAIProvider
 from .openrouter import OpenRouterProvider
 
@@ -22,4 +23,5 @@ __all__ = [
     "OpenAIProvider",
     "AnthropicProvider",
     "OpenRouterProvider",
+    "OllamaProvider",
 ]

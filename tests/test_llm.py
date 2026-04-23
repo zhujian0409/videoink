@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 from videoink.llm.anthropic import AnthropicProvider, _split_system
 from videoink.llm.openai import OpenAIProvider
+from videoink.llm.ollama import OllamaProvider
 from videoink.llm.openrouter import OpenRouterProvider
 
 
@@ -290,6 +291,102 @@ class TestOpenRouterChatViaFakeSDK(unittest.TestCase):
         p = OpenRouterProvider(api_key="or-fake")
         p.chat([{"role": "user", "content": "hi"}], model="openai/gpt-4o-mini")
         self.assertNotIn("default_headers", self.openai_ctor.call_args.kwargs)
+
+
+class TestOllamaProviderInit(unittest.TestCase):
+    def test_name(self):
+        self.assertEqual(OllamaProvider().name, "ollama")
+
+    def test_default_base_url(self):
+        old = os.environ.pop("OLLAMA_HOST", None)
+        try:
+            self.assertEqual(OllamaProvider().base_url, "http://localhost:11434/v1")
+        finally:
+            if old is not None:
+                os.environ["OLLAMA_HOST"] = old
+
+    def test_env_host_honoured(self):
+        old = os.environ.get("OLLAMA_HOST")
+        os.environ["OLLAMA_HOST"] = "gpu-box:11434"
+        try:
+            p = OllamaProvider()
+            self.assertEqual(p.base_url, "http://gpu-box:11434/v1")
+        finally:
+            if old is None:
+                os.environ.pop("OLLAMA_HOST", None)
+            else:
+                os.environ["OLLAMA_HOST"] = old
+
+    def test_env_host_with_scheme_preserved(self):
+        old = os.environ.get("OLLAMA_HOST")
+        os.environ["OLLAMA_HOST"] = "https://ollama.example.com:8443"
+        try:
+            p = OllamaProvider()
+            self.assertEqual(p.base_url, "https://ollama.example.com:8443/v1")
+        finally:
+            if old is None:
+                os.environ.pop("OLLAMA_HOST", None)
+            else:
+                os.environ["OLLAMA_HOST"] = old
+
+    def test_override_base_url_wins(self):
+        old = os.environ.get("OLLAMA_HOST")
+        os.environ["OLLAMA_HOST"] = "should-be-ignored"
+        try:
+            p = OllamaProvider(base_url="http://override/v1")
+            self.assertEqual(p.base_url, "http://override/v1")
+        finally:
+            if old is None:
+                os.environ.pop("OLLAMA_HOST", None)
+            else:
+                os.environ["OLLAMA_HOST"] = old
+
+
+class TestOllamaChatViaFakeSDK(unittest.TestCase):
+    def setUp(self):
+        fake = ModuleType("openai")
+        fake_resp = MagicMock()
+        fake_resp.choices = [MagicMock()]
+        fake_resp.choices[0].message.content = "local llama reply"
+        self.fake_client = MagicMock()
+        self.fake_client.chat.completions.create.return_value = fake_resp
+        self.openai_ctor = MagicMock(return_value=self.fake_client)
+        fake.OpenAI = self.openai_ctor
+        self._prev = sys.modules.get("openai")
+        sys.modules["openai"] = fake
+
+    def tearDown(self):
+        if self._prev is None:
+            sys.modules.pop("openai", None)
+        else:
+            sys.modules["openai"] = self._prev
+
+    def test_client_uses_localhost_and_placeholder_key(self):
+        old = os.environ.pop("OLLAMA_HOST", None)
+        try:
+            p = OllamaProvider()
+            p.chat([{"role": "user", "content": "hi"}], model="llama3.2")
+            kwargs = self.openai_ctor.call_args.kwargs
+            self.assertEqual(kwargs["base_url"], "http://localhost:11434/v1")
+            # Ollama doesn't enforce a key; SDK still requires non-empty — we pass a sentinel
+            self.assertTrue(kwargs["api_key"])
+        finally:
+            if old is not None:
+                os.environ["OLLAMA_HOST"] = old
+
+    def test_chat_returns_content(self):
+        p = OllamaProvider()
+        out = p.chat(
+            [{"role": "user", "content": "hi"}],
+            model="qwen2.5:7b",
+            temperature=0.4,
+            max_tokens=500,
+        )
+        self.assertEqual(out, "local llama reply")
+        call = self.fake_client.chat.completions.create.call_args
+        self.assertEqual(call.kwargs["model"], "qwen2.5:7b")
+        self.assertEqual(call.kwargs["temperature"], 0.4)
+        self.assertEqual(call.kwargs["max_tokens"], 500)
 
 
 if __name__ == "__main__":
