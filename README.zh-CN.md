@@ -1,10 +1,13 @@
 # videoink
 
+[![ci](https://github.com/zhujian0409/videoink/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhujian0409/videoink/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/zhujian0409/videoink)](./LICENSE)
+
 **语言：** [English](./README.md) | 中文
 
 > 把任何视频链接变成一篇打磨过的 Markdown 文章。**在 Claude Code 里用它零 API 开销** —— 也可作为独立 CLI（需要你自己的 LLM key）。
 
-**状态：** v0.1 alpha。端到端跑通。暂未发 PyPI —— 先从 git 装（见下）。
+**状态：** v0.2 alpha。端到端跑通。暂未发 PyPI —— 先从 git 装（见下）。
 
 贴一个 YouTube、B 站或任何 yt-dlp 支持的视频 URL。`videoink` 会拉音频、做转写（本地或 OpenAI Whisper），产出一篇可直接发布的 Markdown 文章和完整本地产物。想发到哪随你 —— Substack、Ghost、dev.to、Medium、Obsidian、你自己的站点……
 

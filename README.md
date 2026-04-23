@@ -1,10 +1,13 @@
 # videoink
 
+[![ci](https://github.com/zhujian0409/videoink/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zhujian0409/videoink/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/zhujian0409/videoink)](./LICENSE)
+
 **Languages:** English | [中文](./README.zh-CN.md)
 
 > Turn any video link into a polished Markdown article. **Skill-native inside Claude Code (zero API cost)** — or a **standalone CLI** with your own keys.
 
-**Status:** v0.1 alpha. End-to-end works. Not yet on PyPI — install from git (see below).
+**Status:** v0.2 alpha. End-to-end works. Not yet on PyPI — install from git (see below).
 
 Paste a YouTube, Bilibili, or any yt-dlp-supported video URL. `videoink` fetches the audio, transcribes it (locally or via OpenAI Whisper), and produces a publishable Markdown article plus a local bundle. You publish it wherever you want — Substack, Ghost, dev.to, Medium, Obsidian, your own static site.
 
