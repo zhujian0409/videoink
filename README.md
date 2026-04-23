@@ -7,7 +7,7 @@
 
 > Turn any video link into a polished Markdown article. **Skill-native inside Claude Code (zero API cost)** — or a **standalone CLI** with your own keys.
 
-**Status:** v0.2 alpha. End-to-end works. Not yet on PyPI — install from git (see below).
+**Status:** v0.3 alpha. End-to-end works. Four LLM providers (OpenAI / Anthropic / OpenRouter / Ollama). Not yet on PyPI — install from git (see below).
 
 Paste a YouTube, Bilibili, or any yt-dlp-supported video URL. `videoink` fetches the audio, transcribes it (locally or via OpenAI Whisper), and produces a publishable Markdown article plus a local bundle. You publish it wherever you want — Substack, Ghost, dev.to, Medium, Obsidian, your own static site.
 

@@ -31,7 +31,7 @@ First pip-installable alpha. Tagged `v0.1.0a0` on GitHub.
 
 ---
 
-## v0.2 (current — 2026-04-22)
+## v0.2 (shipped 2026-04-22)
 
 Correctness / UX hardening pass — all items from the v0.1 `thorough-check`
 observation list. 92 unit tests, all zero-network. No behaviour change for
@@ -48,25 +48,46 @@ previously broke.
 - **S3** `transcribe` auto-chunks oversized audio via ffmpeg `-f segment -c copy` for the openai engine, stitching per-chunk segment timestamps back onto the original timeline.
 - **S4** `cli._sanitize_slug` caps output length at 128 chars to prevent `ENAMETOOLONG`.
 
-## v0.3 backlog
+## v0.3 (current — 2026-04-23)
+
+Provider set widened and CI on. 110 unit tests, all zero-network, matrix
+across Python 3.10 / 3.11 / 3.12 on GitHub Actions.
+
+### Done
+
+- **OpenRouterProvider**: one gateway, many models; OpenAI-compatible
+  endpoint at `openrouter.ai/api/v1`. Supports optional `HTTP-Referer` /
+  `X-Title` attribution headers via `OPENROUTER_HTTP_REFERER` /
+  `OPENROUTER_X_TITLE`.
+- **OllamaProvider**: fully local inference against `localhost:11434/v1`
+  (or wherever `OLLAMA_HOST` points — bare host:port or full URL). No
+  API key required.
+- **CLI wiring**: `--provider openrouter|ollama` on both `generate` and
+  `full`, with sensible per-provider defaults (`openai/gpt-4o-mini`,
+  `llama3.2`).
+- **3 new bundled styles**: `newsletter` (conversational, hook-driven),
+  `summary` (tight ~300-500 word recap), `interview` (preserves verbatim
+  quotes for podcasts / talking-heads).
+- **GitHub Actions CI**: `pytest -q` on push to main and on PRs, matrix
+  on Python 3.10 / 3.11 / 3.12. CI + license badges on README.
+
+## v0.4 backlog
 
 ### New features
 
-- `OpenRouterProvider`, `OllamaProvider` (unify the provider set to four)
 - Multi-model polish/judge loop: generate N variants, have another model pick the best
 - Bilibili first-class support: cookie handling, 1080P+, anti-leech
 - Keyframe-based image insertion + web-image sourcing (exists in the private Codex skill; needs generalising)
-- More bundled styles: `newsletter`, `summary`, `interview`
 
 ### Dev infrastructure
 
-- GitHub Actions: `pytest` on push + release workflow
 - Real CI smoke test against a short public YouTube video
 - `pre-commit` hooks: `ruff` format + lint
+- Release workflow on tag push (build sdist/wheel; optionally publish to PyPI)
 
 ---
 
-## v0.4+ (ideas, no commitment)
+## v0.5+ (ideas, no commitment)
 
 - Codex / Gemini / Cursor / other agent skill front-ends — thin `SKILL.md` variants that all call the same `videoink` Python API
 - Optional HTTP API for team deployments
